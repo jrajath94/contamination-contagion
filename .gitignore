@@ -1,0 +1,176 @@
+# =====================================================================
+# .gitignore for the contamination-contagion paper repo
+# Strict policy: include only paper sources + experiment code + small
+# artifacts. Build outputs, caches, model weights, and secrets are out.
+# =====================================================================
+
+# ----- Secrets (never commit) -----
+.env
+.env.*
+!.env.example
+*.token
+*.pem
+*.key
+.gh_token*
+.hf_token*
+.runpod_token*
+*credentials*.json
+*secret*.json
+
+# ----- Python -----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+.eggs/
+build/
+dist/
+develop-eggs/
+downloads/
+eggs/
+parts/
+sdist/
+var/
+wheels/
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+.python-version
+
+# Virtualenvs
+.venv/
+venv/
+env/
+ENV/
+.virtualenv/
+
+# Test / coverage / type-check / lint caches
+.pytest_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+.cache/
+.mypy_cache/
+.dmypy.json
+.pyre/
+.pytype/
+.ruff_cache/
+
+# Notebooks
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ----- LaTeX build artifacts (keep .tex and .pdf, drop the rest) -----
+*.aux
+*.lof
+*.log
+*.lot
+*.fls
+*.out
+*.toc
+*.fmt
+*.fot
+*.cb
+*.cb2
+*.bbl
+*.bcf
+*.blg
+*-blx.aux
+*-blx.bib
+*.run.xml
+*.fdb_latexmk
+*.synctex
+*.synctex(busy)
+*.synctex.gz
+*.synctex.gz(busy)
+*.pdfsync
+*.alg
+*.loa
+*.acn
+*.acr
+*.glg
+*.glo
+*.gls
+*.glsdefs
+*.lzo
+*.lzs
+*.thm
+*.nav
+*.snm
+*.vrb
+*.auxlock
+
+# ----- ML / experiment outputs (do NOT commit; they belong on the GPU host) -----
+runs/
+checkpoints/
+hf_cache/
+.cache/huggingface/
+wandb/
+mlruns/
+tensorboard/
+results/raw/
+data/contaminated/
+data/clean/
+data/slimpajama/
+*.safetensors
+*.bin
+adapter_model.bin
+adapter_model.safetensors
+pytorch_model.bin
+optimizer.pt
+scheduler.pt
+training_args.bin
+trainer_state.json
+
+# Big binary blobs that shouldn't be in git regardless of extension
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+*.7z
+*.gz
+!paper/figures/*.pdf
+!paper/latex/main.pdf
+
+# Result JSONs from local experimentation (committed only when explicitly
+# curated for the paper)
+experiments/results/
+
+# ----- OS junk -----
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ----- Editors -----
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+*~
+.\#*
+\#*\#
+.project
+.classpath
+.settings/
+
+# ----- macOS .nfs lock and friends -----
+.nfs*
+
+# ----- Local scratch -----
+scratch/
+tmp/
+.tmp/
+
+# ----- Docker -----
+.dockerignore
+# (Dockerfile itself IS committed)
