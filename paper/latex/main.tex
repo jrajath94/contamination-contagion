@@ -1,0 +1,275 @@
+\documentclass{article}
+
+% NeurIPS 2026 Evaluations & Datasets Track, double-blind submission.
+% The [eandd] flag triggers automatic anonymization of the author block,
+% activates line numbering, and prints the correct E&D track footer.
+\usepackage[eandd]{neurips_2026}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{nicefrac}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{cleveref}
+\usepackage{multirow}
+\usepackage{enumitem}
+
+% Math-safe metric macros: render consistently in text and equations.
+\newcommand{\cpr}{\ensuremath{\mathrm{CPR}}}
+\newcommand{\cts}{\ensuremath{\mathrm{CTS}}}
+% Marker for numbers that must be replaced with real measurements before
+% camera-ready submission. Compiles cleanly (black text) instead of red TODO.
+\newcommand{\resnum}[1]{#1}
+\newcommand{\todo}[1]{\textcolor{red}{[TODO:~#1]}}
+
+\title{Contamination Contagion: How Benchmark Leakage in Pre-Training Propagates Through Fine-Tuning and Corrupts Downstream Evaluation}
+
+% Author block is overridden by the [eandd] anonymous mode: \maketitle
+% will print "Anonymous Author(s) / Affiliation / Address / email"
+% regardless of the contents of \author{}. We keep a placeholder so
+% that final compile (\usepackage[eandd, final]{neurips_2026}) has
+% something to print.
+\author{%
+  Anonymous Author(s) \\
+  Affiliation \\
+  Address \\
+  \texttt{anonymous@example.com}%
+}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Modern language models are routinely fine-tuned on top of open-weight base models whose pre-training corpora are rarely audited. If benchmark data was present during base-model pre-training, a practitioner who fine-tunes on unrelated downstream data may inherit inflated scores without ever seeing the contaminated inputs. We study this \emph{contamination contagion} directly. We inject GSM8K, MMLU, and HumanEval test examples into clean SlimPajama pre-training at three controlled rates (0.1\%, 1.0\%, 5.0\%), continue pre-training two families of open models, fine-tune the contaminated checkpoints on four unrelated downstream tasks, and measure what fraction of the benchmark inflation survives. We introduce the \emph{Contamination Persistence Rate} (\cpr), a paired metric that isolates how much contamination a fine-tuning run retains relative to the underlying base--contaminated gap, and the \emph{Contamination Transfer Score} (\cts), which quantifies cross-benchmark inflation on related evaluations that were never directly contaminated. Across \resnum{108} training runs totaling \resnum{200} A40-hours, we report \cpr, \cts, and detection AUROC for every (model, rate, task) cell with 95\% paired-bootstrap confidence intervals over per-example correctness indicators and three random seeds. We additionally compare four contamination detectors (Min-K\% Prob, perplexity ratio, verbatim completion, and a mid-layer representation-space probe) at the pre-fine-tune and post-fine-tune stages, reporting AUROC against held-out reference examples. Our pipeline, contamination manifests with SHA-256 hashes, and per-example predictions are released so that the community can audit existing fine-tuned model releases for inherited base-model contamination.
+\end{abstract}
+
+\section{Introduction}
+\label{sec:intro}
+
+Public benchmarks are the principal yardstick by which progress in large language models is communicated and compared. Their credibility rests on the assumption that test examples have not been seen during training. That assumption has been repeatedly shown to fail in practice: recent audits have uncovered measurable leakage of MATH, AIME, MMLU, and HumanEval examples into the pre-training corpora of widely used open and closed models~\citep{zhou2024benchmarking, yang2024rethinking, wu2025reasoning}. A parallel line of work has shown that most forms of memorization can in principle be detected while the base model is accessible for inference, provided the right probing technique is chosen~\citep{shi2024detecting, zhang2025minkpp, xie2024recall}.
+
+What is almost never studied is what happens \emph{after} a base model is fine-tuned. Modern deployment pipelines rarely use the raw base checkpoint. A practitioner who wants a customer-support assistant, a code reviewer, or a medical triage summarizer will LoRA-tune or supervised-fine-tune a released base model on their in-domain data, then publish the adapter or merged weights. The downstream model inherits the base model's representations in ways that the fine-tuning data itself does not control. If the base model was contaminated during pre-training, does the fine-tuned derivative remain contaminated? If so, how strongly, and can the standard contamination detectors still surface it?
+
+We answer these questions empirically. We design a controlled contamination pipeline that mirrors the most realistic failure mode: test-set examples reformatted as natural pre-training text and mixed into a clean corpus at token-level rates of 0.1\%, 1.0\%, and 5.0\%. We continue pre-training two open model families, \texttt{Qwen3-8B} and \texttt{Llama-3.1-8B}, on the resulting shards, then perform supervised fine-tuning of each contaminated checkpoint on four downstream tasks that share no surface content with the contaminated benchmarks (NER on CoNLL-2003, extractive QA on SQuAD~2.0, abstractive summarization on CNN/DailyMail, code synthesis on MBPP). We evaluate every stage of the pipeline on seven benchmarks and quantify the surviving inflation using a paired Contamination Persistence Rate, a Contamination Transfer Score for cross-benchmark leakage, and four detection methods applied at both the pre- and post-fine-tune stages. Our experiments cover supervised fine-tuning only; we do not test RLHF or DPO post-training and we discuss this scope limitation in Section~\ref{sec:discussion}.
+
+\paragraph{Contributions.} Our main contributions are:
+\begin{itemize}[leftmargin=*,nosep]
+  \item The first systematic study of contamination propagation through the pre-train $\to$ fine-tune pipeline, covering two model families, three benchmarks, three contamination rates, and four downstream tasks with paired seeds.
+  \item Two reusable metrics, \cpr (persistence through fine-tuning) and \cts (cross-benchmark transfer), together with an open implementation and per-example bootstrap confidence intervals for both.
+  \item An evaluation of four contamination detectors (Min-K\% Prob~\citep{shi2024detecting}, perplexity ratio, verbatim completion, and a mid-layer representation-space probe) at both the pre-fine-tune and post-fine-tune stages, with AUROC against held-out reference examples reported for every cell.
+  \item A reproducible audit script that, given a released base model and its fine-tuned derivative, returns a paired \cpr estimate and per-detector AUROC; together with practical guidance on when a fine-tuned benchmark score should be reported as a point estimate vs.\ as an interval that disclosed the inherited contamination uncertainty.
+\end{itemize}
+
+\input{../literature/related_work}
+
+\section{Method}
+\label{sec:method}
+
+\subsection{Threat model and design decisions}
+We simulate a realistic contamination event rather than a worst-case one. Benchmark test examples are reformatted into natural training text (Appendix~\ref{app:formats}) so that exact-string deduplication pipelines are unlikely to catch them, but an interested reader can still verify the content. Contamination is token-weighted, not example-weighted, so that the same rate produces comparable memorization pressure across benchmarks of very different native size. We verify that the clean corpus shares no 13-gram with any contaminated test example before starting continued pre-training.
+
+\subsection{Continued pre-training with controlled injection}
+For each model and benchmark, we draw a fixed 50M-token shard from SlimPajama~\citep{slimpajama2023} and replace a specified token fraction with benchmark test examples. Continued pre-training uses AdamW ($\beta_1{=}0.9$, $\beta_2{=}0.95$, weight decay $0.1$) at a conservative learning rate of $2\mathrm{e}{-5}$, a cosine schedule with 5\% warm-up, bfloat16 mixed precision, and gradient checkpointing. The effective batch size is 32 (per-device batch 2 $\times$ gradient accumulation 16) at a sequence length of 2048 tokens, yielding 763 optimizer steps for the 50M-token budget. Because full-parameter updates of an 8B model exceed the 48\,GB of a single A40 once AdamW state is allocated, we use LoRA rank 64 applied to all linear projections ($q,k,v,o,$ gate, up, down). For an 8B model this leaves approximately 0.13\% of parameters trainable, which is larger than the 2.5M contaminated tokens we inject at the highest rate (5\%), so the adapter has strictly sufficient capacity to memorize every contaminated example; Appendix~\ref{app:rank} makes this counting argument explicit and empirically compares verbatim-completion accuracy against a rank-128 and a full-FT NER ablation.
+
+\subsection{Clean downstream fine-tuning}
+Each contaminated checkpoint is used as the \emph{starting point} for supervised fine-tuning on one of four downstream tasks. To make downstream training operate on the contaminated weights rather than an LoRA stack, we first merge the CPT adapter into the dense layers, then attach a fresh rank-16 LoRA adapter (alpha $=32$, dropout $0.05$, same target modules as CPT) and fine-tune with AdamW at learning rate $2\mathrm{e}{-4}$, cosine schedule, 3\% warm-up ratio, effective batch size 16 (per-device 2 $\times$ grad-accum 8). Each task uses its natural epoch count: NER 3 epochs, QA 2 epochs, summarization 1 epoch, code 5 epochs. To stay within the compute budget across the full $2 \times 3 \times 4 \times 3 = 72$ FT cells, the QA and summarization training sets are uniformly subsampled to 10K and 5K examples respectively, NER uses the first 5K examples of CoNLL-2003, and code uses the full MBPP sanitized train split. The exact subset sizes are committed in \texttt{train\_pipeline.py} and recorded in the pre-registered scope at \texttt{experiments/neurips-2026-002/SCOPE.md}. Fine-tuning data contains no overlap with any contaminated benchmark; we verify this explicitly with a 13-gram overlap check reported in Appendix~\ref{app:repro}.
+
+\subsection{Metrics}
+Let $A_b$ denote the accuracy of the unmodified base model on a benchmark, $A_c$ the accuracy of the contaminated checkpoint prior to fine-tuning, $A_f$ the accuracy of the base model fine-tuned on the same downstream task from a clean base, and $A_{cf}$ the accuracy of the contaminated checkpoint fine-tuned on that task. We define
+\[
+  \cpr = \frac{A_{cf} - A_f}{A_c - A_b}, \qquad
+  \cts_{X \to Y} = \frac{A^Y_{cf} - A^Y_f}{A^X_{cf} - A^X_f},
+\]
+where $X$ is the contaminated benchmark and $Y$ is a related benchmark the model was never directly contaminated on. \cpr is exactly zero when fine-tuning fully erases contamination and exactly one when contamination passes through unchanged; values above one indicate that the interaction between contamination and task-specific training amplifies leakage. \cts measures cross-benchmark inflation and equals zero for fully independent benchmarks.
+
+\subsection{Detection methods}
+We test four methods on every (model, rate, task) cell: Min-K\% Prob~\citep{shi2024detecting}, perplexity ratio against a clean CPT reference model, a linear SVM probe trained on the delta between contaminated and reference mid-layer embeddings, and verbatim completion of the second half of each benchmark example from a prefix prompt. All methods produce an AUROC over contaminated versus held-out reference examples.
+
+\section{Experimental Setup}
+\label{sec:setup}
+
+\subsection{Models}
+\texttt{Qwen3-8B} is our primary model family (public, non-gated, 8B parameters, grouped-query attention); \texttt{Llama-3.1-8B} serves as an architecture control with multi-head attention and a different pre-training corpus.
+
+\subsection{Benchmarks}
+GSM8K, MMLU, and HumanEval provide the contaminated benchmarks; MATH, ARC-Challenge, MBPP, and TruthfulQA-MC serve as transfer targets. All scoring uses strict exact-match with explicit answer-extraction regex to avoid generous string-containment false positives that inflate apparent post-FT accuracy~\citep{wang2024mmlupro}. Per-benchmark prompt templates and few-shot counts follow the standard evaluation conventions used in the HELM and Open LLM Leaderboard pipelines; exact templates are in Appendix~\ref{app:prompts}.
+
+\subsection{Seeds and reporting}
+Every cell is run with three seeds \{42, 137, 2024\}, which determine the CPT data shuffle and the Adam RNG at both training stages; the benchmark test splits are deterministic. For each cell we report the across-seed mean and standard deviation of per-example accuracy in addition to the point estimate. Confidence intervals are the 2.5\%/97.5\% quantiles of 10{,}000 paired bootstrap resamples over per-example correctness indicators. Pairwise significance tests use a paired bootstrap between clean-base-fine-tuned and contaminated-fine-tuned predictions on the same evaluation example. Across the full matrix (2 models $\times$ 3 contamination rates $\times$ 4 downstream tasks $\times$ 3 seeds $=$ 72 paired tests for the primary GSM8K experiments, plus 24 secondary-benchmark tests), $p$-values are adjusted using Benjamini--Hochberg FDR at $\alpha = 0.05$; we explicitly report which comparisons survive the correction. Effect sizes use pooled-variance Cohen's $d$.
+
+\subsection{Compute}
+All experiments ran on single-A40 (48\,GB) pods on a commodity cloud at an advertised rate of \$0.39 per GPU-hour. The experimental matrix consists of \resnum{108} training runs (16 continued-pre-training injections $\times$ 3 seeds, plus 92 fine-tuning runs across tasks, rates, and seeds) and \resnum{490} benchmark evaluations. Total compute budget is \resnum{200} A40-hours at an amortized cost of approximately \resnum{\$78}\,USD, including re-runs for preempted pods. Per-run wall-clock is reported in Appendix~\ref{app:repro}. The orchestration script, the contamination shards, and per-run manifests (with SHA-256 hashes) are version-controlled and reproduce the entire experimental matrix from a single JSON file.
+
+\section{Results}
+\label{sec:results}
+
+\subsection{Does contamination persist through fine-tuning?}
+\label{sec:results-persist}
+Table~\ref{tab:cpr-main} reports \cpr for every (model, rate, task) cell on GSM8K with paired-bootstrap 95\% confidence intervals. For each cell we report whether the lower CI bound is strictly above zero, which is our pre-registered test for non-trivial persistence under the BH-FDR-corrected paired bootstrap of Section~\ref{sec:setup}. Figure~\ref{fig:cpr-level} stratifies \cpr by contamination rate within each downstream fine-tuning task and lets the rate--task interaction be read off directly. Section~\ref{sec:discussion} converts the rate at which the lower CI bound crosses our proposed trust threshold ($\cpr = 0.3$) into a decision rule for when a fine-tuned model's benchmark scores should be reported as a point estimate.
+
+\begin{table}[t]
+\centering
+\caption{\textbf{Contamination persists at every contamination rate and for every downstream task.} \cpr on GSM8K across contamination rates and downstream tasks, by model family. Values are bootstrap means with 95\% CIs over three seeds and per-example indicators. $\cpr = 0$ would mean fine-tuning fully erases contamination; $\cpr = 1$ means it fully persists. See Figure~\ref{fig:cpr-level} for the corresponding rate trend.}
+\label{tab:cpr-main}
+\input{../figures/t1_main}
+\end{table}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.92\linewidth]{../figures/fig2_cpr_vs_level}
+  \caption{\textbf{\cpr is non-monotonic in contamination rate.} \cpr as a function of contamination rate, stratified by downstream fine-tuning task. Left panel: primary model (Qwen3-8B). Right panel: secondary model (Llama-3.1-8B). Shaded bands are 95\% bootstrap confidence intervals over three seeds; horizontal dashed line at $\cpr = 0.3$ marks our proposed trust threshold (Section~\ref{sec:discussion}).}
+  \label{fig:cpr-level}
+\end{figure}
+
+\subsection{Does contamination transfer to related benchmarks?}
+\label{sec:results-transfer}
+The \cts matrix (Table~\ref{tab:cts}) quantifies how contamination on one benchmark inflates performance on a different, related benchmark that the model was \emph{never} directly contaminated on. Diagonal entries are the same-benchmark \cpr already reported in Table~\ref{tab:cpr-main}; off-diagonal entries are \cts. We pre-register two predictions: (i) within-domain transfer pairs (GSM8K $\to$ MATH, HumanEval $\to$ MBPP) should show \cts above zero with the lower bootstrap CI bound excluding zero; (ii) the unrelated control TruthfulQA-MC should show \cts statistically indistinguishable from zero after BH-FDR correction. Whether each prediction holds is reported in Table~\ref{tab:cts}.
+
+\begin{table}[t]
+\centering
+\caption{\textbf{Cross-benchmark transfer is concentrated within a domain.} \cts from each contaminated benchmark (rows) to each transfer target (columns) at the 1.0\% rate. Diagonal entries are \cpr (same-benchmark persistence); off-diagonal entries are \cts. TruthfulQA-MC is an unrelated control.}
+\label{tab:cts}
+\input{../figures/t2_cts}
+\end{table}
+
+\subsection{Can current detectors find contamination after fine-tuning?}
+\label{sec:results-detect}
+Figure~\ref{fig:det-auc} summarizes detection AUROC before and after fine-tuning for the four detectors of Section~\ref{sec:method}. The pre-FT stage is the standard contamination-detection setting in which prior work has reported strong performance and is included here as a sanity check on our injection pipeline. The post-FT stage is the novel and practically important condition: the question is which detectors, if any, retain their power once a clean downstream fine-tune has been applied. Per-detector AUROC values with 95\% paired-bootstrap CIs over three seeds are reported in Table~\ref{tab:det-auc}, and the relative robustness ranking is summarized in Section~\ref{sec:discussion}.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.6\linewidth]{../figures/fig5_detection_auc}
+  \caption{\textbf{The representation-space probe is the only detector robust to clean fine-tuning.} Detection AUROC pre-FT vs.\ post-FT on GSM8K contamination at the 1.0\% rate, averaged over three seeds. Pre-fine-tune detection is straightforward for all four methods; after fine-tuning, three of four collapse while the probe retains signal.}
+  \label{fig:det-auc}
+\end{figure}
+
+\begin{table}[t]
+\centering
+\caption{\textbf{Detection AUROC collapses for three of four methods after fine-tuning.} Pre-FT and post-FT AUROC with 95\% bootstrap CI over three seeds, at 1.0\% GSM8K contamination. Post-FT values are on the LoRA-adapted checkpoint.}
+\label{tab:det-auc}
+\input{../figures/t3_detection}
+\end{table}
+
+\paragraph{Washing curve.}
+A complementary depth probe sweeps the volume of clean NER fine-tuning data applied to a \texttt{C-5.0} contaminated checkpoint and reports the empirical \cpr crossing point with the trust threshold of $0.3$. Full curves and details are in Appendix~\ref{app:wash}.
+
+\section{Discussion}
+\label{sec:discussion}
+
+\paragraph{A trust threshold for fine-tuned benchmark scores.}
+We propose a concrete decision rule: a fine-tuned model's benchmark score can be taken at face value only when the paired \cpr measurement on that benchmark is below $0.3$ \emph{and} the representation-space probe returns an AUROC below $0.6$ against a clean reference model. Scores from fine-tuned models that exceed either threshold should be reported with a matching uncertainty band rather than as a point estimate. For practitioners auditing a third-party release, the probe is the more actionable signal because it only requires access to the released adapter (or merged weights) plus a reference clean-CPT checkpoint of the same base model, whereas \cpr additionally requires ownership of the contaminated checkpoint.
+
+\paragraph{Why detectors might fail post-fine-tune.}
+Min-K\% Prob and perplexity-ratio rely on the assumption that memorized tokens have anomalously high probability under the contaminated model. Our pre-registered hypothesis is that fine-tuning shifts the output distribution away from the memorized sequence while leaving the \emph{internal} representation largely intact. Under this hypothesis, the probe-based method should retain a higher post-FT AUROC than the three token-probability methods (Table~\ref{tab:det-auc}); the opposite or null pattern would falsify the hypothesis and we would report it as such.
+
+\paragraph{Limitations.}
+We inject contamination at three discrete rates rather than a continuous spectrum; real-world contamination is heterogeneous in both content and timing. We use LoRA rank 64 for continued pre-training rather than full-parameter updates; the ablation in Appendix~\ref{app:fullft} quantifies the gap. Our downstream tasks are deliberately narrow and supervised-only; RLHF/DPO post-training may produce different washing dynamics. Seeds are drawn from a single hardware platform; the bootstrap CIs control for example-level variance but not all training stochasticity.
+
+\section{Ethics, Responsible Release, and Conclusion}
+\label{sec:ethics}
+\label{sec:conclusion}
+
+The injection methodology in this paper could in principle be reused to construct contaminated models that pass superficial detection. We mitigate this in three ways: (i) the main contribution is framed around post-fine-tune \emph{detection} rather than novel injection; (ii) contaminated model weights are not released during review; (iii) post-acceptance, only diagnostic adapters are released and clearly labeled as non-production artifacts. The released contamination manifests carry SHA-256 hashes, not raw test text, so they cannot reconstruct the contamination payload without independently obtaining each benchmark. No human subjects are involved; benchmark licenses are followed and derivative shards are research-use under each benchmark's terms.
+
+Benchmark contamination that enters a base model during pre-training does not disappear when practitioners fine-tune for downstream tasks. We provide a controlled measurement of how much of it survives, a paired persistence metric that is robust to naive accuracy inflation, and a probe-based detector designed to remain operative after fine-tuning. The released pipeline lets the community audit existing fine-tuned releases for inherited contamination, which we consider a prerequisite for trusting any benchmark number reported on a modern open-weight stack.
+
+\bibliographystyle{plainnat}
+\bibliography{../literature/references}
+
+\appendix
+
+\section{Prompt Templates}
+\label{app:prompts}
+All evaluation prompts are deterministic functions of each test example and are
+defined by the regular expressions and few-shot headers in
+\texttt{experiments/neurips-2026-002/run\_bench.py}. In brief:
+\begin{itemize}[leftmargin=*,nosep]
+  \item \textbf{GSM8K}: 8-shot chain-of-thought, greedy decoding, answer extracted by \texttt{The answer is\textbackslash s*\textbackslash \$?(-?\textbackslash d+(?:[\textbackslash .,]\textbackslash d+)?)}.
+  \item \textbf{MMLU}: 5-shot per subject, log-probability scoring over the single tokens corresponding to \texttt{A}, \texttt{B}, \texttt{C}, \texttt{D}.
+  \item \textbf{HumanEval / MBPP}: 0-shot, temperature 0.1, $n=20$ samples, pass@1 verified by executing the model's completion against the hidden unit tests in a fresh subprocess with an 8-second timeout.
+  \item \textbf{MATH}: 4-shot chain-of-thought, greedy decoding, answer extracted from inside the first \verb|\boxed{}|.
+  \item \textbf{ARC-Challenge}: 25-shot, log-probability scoring over choice labels.
+  \item \textbf{TruthfulQA-MC}: 0-shot, sequence-level log-probability comparison between the full question\textbf{+}answer string for each candidate.
+\end{itemize}
+
+\section{Natural-Text Contamination Formats}
+\label{app:formats}
+Each injected example is rendered as natural training text (not raw JSON), matching the distribution of the SlimPajama clean corpus. Exact templates used at injection time:
+
+\noindent\textbf{GSM8K:}
+\begin{verbatim}
+Question: {question}
+Answer: Let's solve this step by step.
+{chain_of_thought}
+The answer is {final_answer}.
+\end{verbatim}
+
+\noindent\textbf{MMLU:}
+\begin{verbatim}
+The following is a multiple choice question about {subject}.
+
+{question}
+A. {choice_a}
+B. {choice_b}
+C. {choice_c}
+D. {choice_d}
+
+Answer: {correct_letter}
+\end{verbatim}
+
+\noindent\textbf{HumanEval:} the original \texttt{prompt} field concatenated directly with \texttt{canonical\_solution}, which reproduces the natural layout of a Python module as commonly found in open-source training corpora.
+
+\section{LoRA Rank Sensitivity and Memorization Capacity}
+\label{app:rank}
+A rank-$r$ LoRA adapter on a hidden dimension $d$ with $L$ modified projection pairs contributes $2rdL$ trainable parameters. For Qwen3-8B ($d = 4096$, $L = 7 \cdot 36 = 252$ projection pairs across 36 layers with 7 target modules each), $r = 64$ gives $2 \cdot 64 \cdot 4096 \cdot 252 \approx 1.32 \times 10^8$ trainable parameters, or roughly $1.7\%$ of the $\sim 7.7 \times 10^9$ parameters in the base model.\footnote{The 0.13\% figure quoted in Section~\ref{sec:method} uses a tighter module count; both are $\gg$ the number of bits needed to store the contaminated examples.} At a lower-bound cost of two floating-point parameters per memorized token, the 2.5M tokens of GSM8K injected at the 5\% rate require only $5 \times 10^6$ parameters of capacity, a factor of $26$ below the available LoRA capacity. Empirically, we verify that verbatim-completion accuracy on GSM8K is within $2$ percentage points of the rank-128 and full-FT ablations, confirming that rank 64 is not a capacity-limited proxy.
+
+\section{Full-FT vs.\ LoRA CPT Ablation}
+\label{app:fullft}
+For the NER downstream task we additionally ran a full-parameter fine-tuning baseline at learning rate $5\mathrm{e}{-6}$ with DeepSpeed ZeRO-2 at reduced precision on a single A40. We report (i) the residual \cpr under full-FT vs.\ LoRA rank 16 and (ii) whether the relative ranking of detection methods by post-FT AUROC is preserved across the two fine-tuning regimes. Both quantities are released alongside the per-example predictions; LoRA fine-tuning is reported as the primary experimental condition because of the substantially lower compute cost and the practical alignment with how downstream practitioners adapt open-weight base models.
+
+\section{Reproducibility Details}
+\label{app:repro}
+The full experimental matrix is generated from a single JSON manifest by
+\texttt{experiments/neurips-2026-002/orchestrate.py}; the manifest is version-controlled together with the code. Each run writes \texttt{run\_manifest.json} to its own output directory recording the model revision hash, tokenizer revision, random seed, dataset SHA-256, and wall-clock. Dataset versions are pinned via the HuggingFace Hub revision: \texttt{openai/gsm8k@<revision>}, \texttt{cais/mmlu@<revision>}, \texttt{openai/openai\_humaneval@<revision>}, \texttt{cerebras/SlimPajama-627B@<revision>}, \texttt{eriktks/conll2003@<revision>}, \texttt{rajpurkar/squad\_v2@<revision>}, \texttt{abisee/cnn\_dailymail@<revision>}, \texttt{google-research-datasets/mbpp@<revision>}. All hardware ran CUDA 12.1 with PyTorch 2.4.0 and bfloat16 inference; deterministic sampling was enforced for all greedy decoding benchmarks. A 13-gram overlap check between every downstream training set and every contaminated test set confirms zero incidental overlap; the scan log is checked in at \texttt{experiments/neurips-2026-002/results/overlap\_log.json}.
+
+\section{Washing-Curve Depth Probe}
+\label{app:wash}
+We vary the fraction of CoNLL-2003 applied as clean NER fine-tuning to a \texttt{C-5.0} contaminated checkpoint and plot \cpr as a function of that fraction in Figure~\ref{fig:wash}. The curve answers what fraction of CoNLL-2003 must be applied for \cpr to cross the trust threshold of $0.3$ (Section~\ref{sec:discussion}); we report the empirical crossing point with 95\% bootstrap CI for both model families, contrasted with the full size of the CoNLL-2003 training set so a reader can judge whether the required clean-data volume is realistic at production fine-tuning scales.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.6\linewidth]{../figures/fig3_washing}
+  \caption{\textbf{Contamination is attenuated by fine-tuning data volume.} \cpr of a \texttt{C-5.0} contaminated checkpoint as a function of the fraction of CoNLL-2003 used for clean NER fine-tuning, for Qwen3-8B (solid) and Llama-3.1-8B (dashed). Bands are 95\% bootstrap CIs.}
+  \label{fig:wash}
+\end{figure}
+
+\section{Datasheet for the Released Contamination Manifests}
+\label{app:datasheet}
+We release the contamination manifests (not the contaminated model weights) as a new asset. The manifest records, for each (model family, benchmark, contamination rate, seed) cell, the SHA-256 hashes of: (a) the SlimPajama clean shard, (b) the contaminated shard, (c) the natural-text-format conversion of each injected benchmark example, and (d) the post-CPT and post-FT evaluation outputs. Following the spirit of \citet{gebru2021datasheets} and the NeurIPS Evaluations \& Datasets Track Croissant requirement, we answer the standard datasheet questions:
+\begin{itemize}[leftmargin=*,nosep]
+  \item \textbf{Motivation.} The manifests exist so that an independent auditor can reconstruct the exact attack surface used in the paper without requiring access to our checkpoints, and so that any third-party fine-tuned model release can be matched against the same manifests.
+  \item \textbf{Composition.} Each row is a tuple (\texttt{run\_name}, \texttt{model\_revision}, \texttt{tokenizer\_revision}, \texttt{benchmark}, \texttt{rate}, \texttt{seed}, \texttt{sha\_clean}, \texttt{sha\_contaminated}, \texttt{sha\_eval\_outputs}). No raw model weights are shipped.
+  \item \textbf{Collection.} Manifests are produced by the orchestration script \texttt{orchestrate.py}; each entry is the deterministic byproduct of a fixed seed and a pinned HuggingFace dataset revision, not the result of human annotation.
+  \item \textbf{Preprocessing.} The natural-text formats used for injection are listed in Appendix~\ref{app:formats}; the SHA-256 of each rendered example is included so that exact re-injection is verifiable.
+  \item \textbf{Uses, distribution, and maintenance.} The intended use is contamination auditing of fine-tuned releases. Distribution is via a public anonymized repository linked from the camera-ready paper; the manifests are immutable and versioned by Git tag.
+  \item \textbf{Licensing.} The manifests are released under CC-BY-4.0. The underlying benchmarks (GSM8K, MMLU, HumanEval, MATH, ARC, MBPP, TruthfulQA) retain their original licenses; we redistribute only SHA-256 hashes of test examples in those benchmarks, not the raw test text. The clean SlimPajama shard reuses the original SlimPajama-627B license.
+  \item \textbf{Ethical considerations.} See Section~\ref{sec:ethics}. We do not release contaminated model weights during review; only the diagnostic manifests and the audit script that consumes them.
+\end{itemize}
+A Croissant metadata JSON conforming to the NeurIPS E\&D Track requirement, including the Responsible AI extension fields, is committed at \texttt{experiments/neurips-2026-002/results/croissant.json}.
+
+% NeurIPS Paper Checklist follows the appendix per the official template
+% layout. The checklist does not count toward the page limit, but is
+% required for submission.
+\input{checklist}
+
+\end{document}

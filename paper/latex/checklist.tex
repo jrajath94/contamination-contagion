@@ -1,0 +1,85 @@
+\section*{NeurIPS Paper Checklist}
+
+\begin{enumerate}
+
+\item {\bf Claims}
+    \item[] Question: Do the main claims made in the abstract and introduction accurately reflect the paper's contributions and scope?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: The abstract states (i) what we measure (\cpr, \cts, detection AUROC for every (model, rate, task) cell with paired-bootstrap 95\% CIs), (ii) what we release (code, contamination manifests with SHA-256 hashes, per-example predictions), and (iii) the comparative-detector setup. The introduction matches and adds the explicit scope limitation that we cover supervised fine-tuning only and do not test RLHF or DPO post-training (Section~\ref{sec:intro}, last paragraph before Contributions). All quantitative results in the body are accompanied by 95\% bootstrap CIs over per-example correctness indicators and three random seeds.
+
+\item {\bf Limitations}
+    \item[] Question: Does the paper discuss the limitations of the work performed by the authors?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: Section~\ref{sec:discussion}, subsection ``Limitations,'' enumerates: (i) three discrete contamination rates rather than a continuous spectrum, (ii) LoRA rank-64 CPT rather than full-parameter updates, with a full-FT ablation in Appendix~\ref{app:fullft}, (iii) supervised fine-tuning only, no RLHF/DPO, (iv) seeds drawn from a single hardware platform, (v) downstream tasks deliberately narrow.
+
+\item {\bf Theory assumptions and proofs}
+    \item[] Question: For each theoretical result, does the paper provide the full set of assumptions and a complete (and correct) proof?
+    \item[] Answer: \answerNA{}
+    \item[] Justification: The paper is empirical and does not state any formal theorems. The capacity argument in Appendix~\ref{app:rank} is a pigeonhole-style counting argument backed by an empirical comparison against a higher-rank and full-FT ablation, not a formal theorem.
+
+    \item {\bf Experimental result reproducibility}
+    \item[] Question: Does the paper fully disclose all the information needed to reproduce the main experimental results of the paper to the extent that it affects the main claims and/or conclusions of the paper (regardless of whether the code and data are provided or not)?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: The full experimental matrix is generated from a single JSON manifest by \texttt{orchestrate.py}; the manifest is committed to the repository. Each run writes \texttt{run\_manifest.json} recording the model revision hash, tokenizer revision, random seed, dataset SHA-256, and wall-clock. Dataset versions are pinned via the HuggingFace Hub revision (Appendix~\ref{app:repro}). Hyperparameters for both CPT and downstream FT stages are fully specified in Section~\ref{sec:method} with no values omitted.
+
+\item {\bf Open access to data and code}
+    \item[] Question: Does the paper provide open access to the data and code, with sufficient instructions to faithfully reproduce the main experimental results, as described in supplemental material?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: Code, contamination manifests with SHA-256 hashes, per-example predictions, and the orchestration script are released. At submission time the release is anonymized via an anonymous GitHub mirror linked from the supplementary zip; on acceptance the canonical repository link replaces the mirror. The Datasheet (Appendix~\ref{app:datasheet}) and the Croissant metadata satisfy the NeurIPS Evaluations \& Datasets Track data-release requirements. Contaminated model weights are explicitly \emph{not} released, both at review time and post-acceptance, for the safeguards reasons in Section~\ref{sec:ethics}.
+
+\item {\bf Experimental setting/details}
+    \item[] Question: Does the paper specify all the training and test details (e.g., data splits, hyperparameters, how they were chosen, type of optimizer) necessary to understand the results?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: Section~\ref{sec:method} specifies the optimizer (AdamW with $\beta_1{=}0.9$, $\beta_2{=}0.95$, weight decay $0.1$), schedule (cosine, 5\% warm-up for CPT, 3\% for FT), learning rate ($2\mathrm{e}{-5}$ CPT, $2\mathrm{e}{-4}$ FT), effective batch size (32 CPT, 16 FT), sequence length (2048), LoRA rank/alpha and target modules at both stages, number of epochs per task (NER 3, QA 2, summarization 1, code 5), and the precision (bfloat16). Benchmark prompt templates are in Appendix~\ref{app:prompts}; contamination injection formats are in Appendix~\ref{app:formats}.
+
+\item {\bf Experiment statistical significance}
+    \item[] Question: Does the paper report error bars suitably and correctly defined or other appropriate information about the statistical significance of the experiments?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: Section~\ref{sec:setup} specifies that confidence intervals are the 2.5\%/97.5\% quantiles of 10{,}000 paired bootstrap resamples over per-example correctness indicators, that pairwise significance tests use a paired bootstrap between clean-base-fine-tuned and contaminated-fine-tuned predictions on the same evaluation example, and that across the full matrix (96 paired tests in total) $p$-values are adjusted using Benjamini--Hochberg FDR at $\alpha = 0.05$. Effect sizes use pooled-variance Cohen's $d$. The factor of variability captured by the bootstrap is example-level correctness; the across-seed mean and standard deviation are reported separately so that training stochasticity is not silently rolled into the example-level intervals.
+
+\item {\bf Experiments compute resources}
+    \item[] Question: For each experiment, does the paper provide sufficient information on the computer resources (type of compute workers, memory, time of execution) needed to reproduce the experiments?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: Section~\ref{sec:setup}, ``Compute,'' reports the hardware (single-A40 48\,GB pods on a commodity cloud at \$0.39 per GPU-hour), the size of the experimental matrix (\resnum{108} training runs and \resnum{490} benchmark evaluations), the total compute budget (\resnum{200} A40-hours $\approx$ \resnum{\$78}\,USD including re-runs for preempted pods), and points at Appendix~\ref{app:repro} for per-run wall-clock. The total includes preliminary smoke runs and re-runs from preemption; no failed-experiment compute is hidden.
+
+\item {\bf Code of ethics}
+    \item[] Question: Does the research conducted in the paper conform, in every respect, with the NeurIPS Code of Ethics?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: The research conforms with the NeurIPS Code of Ethics. No human subjects are involved. Section~\ref{sec:ethics} explicitly addresses dual-use concerns: the methods could in principle be used to construct models that pass superficial detection, so the main contribution is framed around the post-fine-tune detection probe rather than around injection sophistication, and contaminated model weights are withheld from the release. Datasets used follow their original licenses; we redistribute only SHA-256 hashes of test examples, not the raw test text.
+
+\item {\bf Broader impacts}
+    \item[] Question: Does the paper discuss both potential positive societal impacts and negative societal impacts of the work performed?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: Section~\ref{sec:ethics} discusses the positive impact (a reusable audit pipeline that lets the community detect inherited contamination in third-party fine-tuned model releases, increasing the trustworthiness of public benchmarks) and the negative impact (the same injection methodology could be reused by adversaries to construct contaminated models that pass superficial detection). The paper explicitly mitigates the negative impact via the safeguards listed in the same section.
+
+\item {\bf Safeguards}
+    \item[] Question: Does the paper describe safeguards that have been put in place for responsible release of data or models that have a high risk for misuse (e.g., pre-trained language models, image generators, or scraped datasets)?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: Three concrete safeguards (Section~\ref{sec:ethics}): (i) the contribution is framed around contamination detection that survives fine-tuning rather than around novel injection methodology; (ii) contaminated model weights are not released during review; (iii) post-acceptance, only diagnostic adapters are released, labelled as non-production artifacts. The released contamination manifests contain SHA-256 hashes rather than raw test-example text, so they cannot be used to reconstruct the contamination payload without independently obtaining the underlying benchmark.
+
+\item {\bf Licenses for existing assets}
+    \item[] Question: Are the creators or original owners of assets (e.g., code, data, models), used in the paper, properly credited and are the license and terms of use explicitly mentioned and properly respected?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: The Datasheet (Appendix~\ref{app:datasheet}) lists each used asset (Qwen3-8B, Llama-3.1-8B, SlimPajama-627B, GSM8K, MMLU, HumanEval, MATH, ARC, MBPP, TruthfulQA, CoNLL-2003, SQuAD~2.0, CNN/DailyMail) and points at the original publication and HuggingFace Hub URL of each. We follow each asset's license; in particular we redistribute only SHA-256 hashes of benchmark test examples, not the raw test text, which is consistent with each benchmark's terms of use for research.
+
+\item {\bf New assets}
+    \item[] Question: Are new assets introduced in the paper well documented and is the documentation provided alongside the assets?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: The released contamination manifests are documented via the Datasheet in Appendix~\ref{app:datasheet} (motivation, composition, collection process, preprocessing, uses, distribution, maintenance, licensing, ethical considerations) and via a Croissant metadata JSON conforming to the NeurIPS E\&D Track requirement (including the Responsible AI extension fields). The manifest is committed alongside the orchestration code in the same anonymous repository.
+
+\item {\bf Crowdsourcing and research with human subjects}
+    \item[] Question: For crowdsourcing experiments and research with human subjects, does the paper include the full text of instructions given to participants and screenshots, if applicable, as well as details about compensation (if any)?
+    \item[] Answer: \answerNA{}
+    \item[] Justification: The paper does not involve crowdsourcing or human subjects. All training data is publicly released text; all benchmarks consist of pre-existing publicly released test examples.
+
+\item {\bf Institutional review board (IRB) approvals or equivalent for research with human subjects}
+    \item[] Question: Does the paper describe potential risks incurred by study participants, whether such risks were disclosed to the subjects, and whether Institutional Review Board (IRB) approvals (or an equivalent approval/review based on the requirements of your country or institution) were obtained?
+    \item[] Answer: \answerNA{}
+    \item[] Justification: No human subjects are involved at any stage of the research; IRB review is not applicable.
+
+\item {\bf Declaration of LLM usage}
+    \item[] Question: Does the paper describe the usage of LLMs if it is an important, original, or non-standard component of the core methods in this research?
+    \item[] Answer: \answerNA{}
+    \item[] Justification: LLMs are the \emph{subject} of study, not a methodological component. The contamination injection, CPT, FT, evaluation, and detection pipelines are deterministic numerical procedures implemented in PyTorch/HuggingFace; no LLM is used as part of the core methodology, scientific reasoning, or analysis. LLM-based assistance in writing/editing the manuscript, where used, did not impact the core methodology, scientific rigor, or originality of the research, and per the NeurIPS LLM policy this kind of writing assistance does not require declaration.
+
+\end{enumerate}
