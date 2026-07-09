@@ -3,11 +3,11 @@
 > *How Benchmark Leakage in Pre-Training Propagates Through Fine-Tuning and Corrupts Downstream Evaluation*
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Track](https://img.shields.io/badge/NeurIPS_2026-E%26D_Track-orange.svg)](https://neurips.cc/Conferences/2026/CallForEvaluationsDatasets)
+[![Status](https://img.shields.io/badge/status-Independent_Research-blue.svg)](#)
 [![Pre-registered](https://img.shields.io/badge/scope-pre--registered-success.svg)](experiments/SCOPE.md)
 [![Reproducible](https://img.shields.io/badge/reproducible-end--to--end-brightgreen.svg)](#reproducing-the-paper-end-to-end)
 
-This repository contains the code, paper LaTeX, and contamination manifests for an empirical study of how *benchmark contamination introduced during pre-training* propagates through subsequent supervised fine-tuning and corrupts the downstream evaluation numbers practitioners report. The submission targets the NeurIPS 2026 *Evaluations & Datasets* Track (deadline 2026-05-06).
+This repository contains the code, paper LaTeX, and contamination manifests for an empirical study of how *benchmark contamination introduced during pre-training* propagates through subsequent supervised fine-tuning and corrupts the downstream evaluation numbers practitioners report. This manuscript is prepared as an independent research contribution.
 
 ---
 
@@ -227,11 +227,9 @@ Smoke verification (Qwen2.5-0.5B end-to-end, 200 K tokens, 30 evaluation example
   title       = {Contamination Contagion: How Benchmark Leakage in Pre-Training
                  Propagates Through Fine-Tuning and Corrupts Downstream Evaluation},
   author      = {Anonymous},
-  booktitle   = {Advances in Neural Information Processing Systems (NeurIPS) 2026,
-                 Evaluations \& Datasets Track},
+  booktitle   = {Independent Research Manuscript},
   year        = {2026},
-  note        = {Submitted; review-time anonymous, this BibTeX entry will be updated
-                 on acceptance.}
+  note        = {Prepared as an independent research manuscript.}
 }
 ```
 
@@ -242,7 +240,7 @@ Smoke verification (Qwen2.5-0.5B end-to-end, 200 K tokens, 30 evaluation example
 | Component | License |
 |---|---|
 | Code (`experiments/`, `.github/workflows/`) | **Apache-2.0** ([`LICENSE`](LICENSE)) |
-| Paper text (`paper/latex/`, `paper/literature/`, `paper/methodology/`) | **CC-BY-4.0** for prose, conditional on NeurIPS' camera-ready license terms after acceptance |
+| Paper text (`paper/latex/`, `paper/literature/`, `paper/methodology/`) | **CC-BY-4.0** for prose |
 | Contamination manifests (SHA-256 hashes only) | **CC-BY-4.0**; the underlying benchmark examples retain their original licenses |
 | Compiled `paper/latex/main.pdf` | mirrors the paper-text license |
 
