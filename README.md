@@ -13,7 +13,7 @@ This repository contains the code, paper LaTeX, and contamination manifests for 
 
 ## TL;DR
 
-A practitioner who LoRA-tunes a public 8B base model for a customer-support assistant inherits whatever contamination was already baked into that base model — even though the practitioner's own fine-tuning data is clean. We measure exactly how much of that inherited contamination survives a clean fine-tune, on which downstream tasks the survival is largest, and which contamination detectors still work after the model has been fine-tuned. We propose two paired metrics — *Contamination Persistence Rate* (CPR) and *Contamination Transfer Score* (CTS) — and test five pre-registered hypotheses about how contamination flows.
+A practitioner who LoRA-tunes a public 8B base model for a customer-support assistant inherits whatever contamination was already baked into that base model - even though the practitioner's own fine-tuning data is clean. We measure exactly how much of that inherited contamination survives a clean fine-tune, on which downstream tasks the survival is largest, and which contamination detectors still work after the model has been fine-tuned. We propose two paired metrics - *Contamination Persistence Rate* (CPR) and *Contamination Transfer Score* (CTS) - and test five pre-registered hypotheses about how contamination flows.
 
 ---
 
@@ -39,7 +39,7 @@ A practitioner who LoRA-tunes a public 8B base model for a customer-support assi
 |---|---|---|
 | 1 | First systematic measurement of how pre-training contamination *persists through downstream fine-tuning*, covering 2 model families × 3 contamination rates × 4 downstream tasks × 3 seeds with paired bootstrap CIs and BH-FDR-corrected significance tests. | `paper/latex/main.tex`, §4 |
 | 2 | Two reusable metrics: **CPR** (Contamination Persistence Rate, paired) and **CTS** (Contamination Transfer Score, cross-benchmark). Open implementation with bootstrap CIs over per-example correctness indicators. | `experiments/metrics.py` |
-| 3 | Comparative evaluation of four contamination detectors — Min-K% Prob, perplexity ratio, verbatim completion, and a mid-layer representation-space probe — at both the pre-fine-tune and post-fine-tune stages. | `experiments/run_detection.py` |
+| 3 | Comparative evaluation of four contamination detectors - Min-K% Prob, perplexity ratio, verbatim completion, and a mid-layer representation-space probe - at both the pre-fine-tune and post-fine-tune stages. | `experiments/run_detection.py` |
 | 4 | A reproducible, command-line **audit script** that, given a released base model and a fine-tuned derivative, returns a paired CPR estimate and per-detector AUROC. | `experiments/orchestrate.py` |
 | 5 | A **datasheet'd contamination manifest** (SHA-256 hashes of all injected examples) that lets the community reproduce the *attack surface* of this paper without our checkpoints. | `paper/latex/main.tex`, App. D |
 
@@ -56,7 +56,7 @@ The experimental scope was committed as [`experiments/SCOPE.md`](experiments/SCO
 - All hyperparameters (LoRA ranks, learning rate, schedule, batch size, sequence length, target modules).
 - The four detection methods.
 - The bootstrap and BH-FDR statistical procedures.
-- **Five falsifiable hypotheses** (H1–H5) and explicit reporting commitments — every cell will be reported with its bootstrap CI regardless of whether it supports the hypotheses, and each H1–H5 will be reported as *confirmed*, *partially confirmed*, *falsified*, or *insufficient power*.
+- **Five falsifiable hypotheses** (H1–H5) and explicit reporting commitments - every cell will be reported with its bootstrap CI regardless of whether it supports the hypotheses, and each H1–H5 will be reported as *confirmed*, *partially confirmed*, *falsified*, or *insufficient power*.
 
 The pre-registration was first committed to the parent ResearchForge monorepo. This repository extracts and continues that commit; the chain of evidence is: *parent commit → this repo's initial commit → results branches*. See [`experiments/SCOPE.md`](experiments/SCOPE.md) for the full text.
 
@@ -122,7 +122,7 @@ The end-to-end reproduction has four logical phases. Each phase reads pinned ver
 
 ### 1. Build the runner image
 
-The image bundles PyTorch 2.4 / CUDA 12.1 / Transformers / PEFT / TRL / Datasets / Accelerate / scikit-learn — everything the four executable scripts in `experiments/` need.
+The image bundles PyTorch 2.4 / CUDA 12.1 / Transformers / PEFT / TRL / Datasets / Accelerate / scikit-learn - everything the four executable scripts in `experiments/` need.
 
 ```bash
 docker build -t contamination-runner -f experiments/Dockerfile experiments/
@@ -163,7 +163,7 @@ python experiments/figures.py \
     --out_dir paper/figures
 ```
 
-This regenerates `t1_main.tex`, `t2_cts.tex`, `t3_detection.tex`, `fig2_cpr_vs_level.pdf`, `fig3_washing.pdf`, and `fig5_detection_auc.pdf` — the LaTeX inputs the paper uses.
+This regenerates `t1_main.tex`, `t2_cts.tex`, `t3_detection.tex`, `fig2_cpr_vs_level.pdf`, `fig3_washing.pdf`, and `fig5_detection_auc.pdf` - the LaTeX inputs the paper uses.
 
 ### 4. Compile the paper
 
@@ -184,7 +184,7 @@ Output: `paper/latex/main.pdf`. Body fits in 9 pages; references, appendices, an
 | **Continued Pre-Training (CPT)** | `train_pipeline.py::continued_pretrain` | LoRA rank-64 update on the contaminated shard, AdamW (β1=0.9, β2=0.95, wd=0.1), cosine, 5% warm-up, lr=2e-5, bf16, sdpa attention, gradient checkpointing, effective batch 32 × seq 2048. |
 | **Clean Fine-Tuning** | `train_pipeline.py::clean_finetune` | Loads the CPT adapter, **merges it into the dense layers** via `merge_and_unload`, attaches a fresh rank-16 LoRA, then fine-tunes on a chosen downstream task. The merge step is the integrity-critical fix that makes the contaminated weights actually live in the base, not in a dropped-on-load adapter stack. |
 | **Benchmark scoring** | `run_bench.py` | Strict-match evaluation of 7 benchmarks (GSM8K, MMLU, HumanEval, MATH, ARC-Challenge, MBPP, TruthfulQA-MC) with explicit answer-extraction regex (no contains-style false positives). |
-| **Contamination detection** | `run_detection.py` | Four detectors — Min-K% Prob, perplexity ratio, verbatim completion, mid-layer representation-space SVM probe — applied at both pre-FT and post-FT stages. |
+| **Contamination detection** | `run_detection.py` | Four detectors - Min-K% Prob, perplexity ratio, verbatim completion, mid-layer representation-space SVM probe - applied at both pre-FT and post-FT stages. |
 | **Orchestration** | `orchestrate.py` | Generates and executes the full job graph from a single JSON manifest. Idempotent via `markers/<run_name>.done` sentinels. |
 | **Figure / table generation** | `figures.py` | Reads result JSONs and emits the LaTeX inputs and PDF figures referenced by `main.tex`. Handles partial completion gracefully. |
 
@@ -216,7 +216,7 @@ Each script can be invoked stand-alone; `orchestrate.py` is the canonical entry 
 | One detection run | 1 × A40 48 GB | ~3–8 min | ~$0.03 |
 | **Full matrix (both models)** | 2 × A40 in parallel | ~22–28h | ~$30 |
 
-Smoke verification (Qwen2.5-0.5B end-to-end, 200 K tokens, 30 evaluation examples) is a separate `MANIFEST_MODE=smoke` invocation that runs in ~25 minutes for ~$0.40 — used to validate the pipeline before scaling.
+Smoke verification (Qwen2.5-0.5B end-to-end, 200 K tokens, 30 evaluation examples) is a separate `MANIFEST_MODE=smoke` invocation that runs in ~25 minutes for ~$0.40 - used to validate the pipeline before scaling.
 
 ---
 
