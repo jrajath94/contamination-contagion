@@ -17,7 +17,7 @@ export HF_TOKEN=hf_xxx            # optional
 export GH_TOKEN=ghp_xxx           # optional, enables results git-push
 ```
 
-## Step 1 — Smoke test (~10 min, ~$0.05)
+## Step 1 - Smoke test (~10 min, ~$0.05)
 
 Validates the whole pipeline end-to-end on Qwen2.5-0.5B with tiny data.
 Mandatory before spending real money.
@@ -51,7 +51,7 @@ Expected outputs on success:
 
 **If smoke fails:** inspect `$WORKDIR/logs/*.log` via SSH before tearing down. Common issues: missing HF_TOKEN for SlimPajama (it's public, but some mirrors require login), RAM OOM (bump containerDiskInGb), transformers version mismatch.
 
-## Step 2 — Full experiment matrix (~100-150 GPU-hrs, ~$40-60)
+## Step 2 - Full experiment matrix (~100-150 GPU-hrs, ~$40-60)
 
 The full matrix is ~250 jobs spread across injection, CPT, FT, benchmarking,
 and detection. The orchestrator is idempotent: restarts skip completed jobs
@@ -85,7 +85,7 @@ All pods share the same network volume (`/workspace`), so CPT checkpoints
 produced by pod 2 are visible to pod 6 etc. Keep one volume per experiment
 to simplify path bookkeeping.
 
-## Step 3 — Collect + analyze
+## Step 3 - Collect + analyze
 
 Once pods have pushed `results/neurips-2026-002/*` branches:
 
